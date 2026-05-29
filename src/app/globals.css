@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --blue-primary: #2563eb;
+  --blue-dark: #1e40af;
+  --green: #16a34a;
+  --orange: #ea580c;
+  --red: #dc2626;
+  --blue-light: #2563eb;
+  --purple: #7c3aed;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #f3f4f6;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Status button styles */
+.status-btn {
+  @apply px-2 py-1 rounded text-xs font-bold cursor-pointer transition-all duration-150 border;
+}
+.status-btn:hover {
+  @apply opacity-80;
+}
+/* P = green */
+.status-btn.active-P {
+  @apply bg-green-500 text-white border-green-600;
+}
+/* OT = yellow */
+.status-btn.active-OT {
+  @apply bg-yellow-400 text-white border-yellow-500;
+}
+/* O = orange */
+.status-btn.active-O {
+  @apply bg-orange-500 text-white border-orange-600;
+}
+/* L = red */
+.status-btn.active-L {
+  @apply bg-red-500 text-white border-red-600;
+}
+/* V = blue */
+.status-btn.active-V {
+  @apply bg-blue-500 text-white border-blue-600;
+}
