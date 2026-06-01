@@ -4,6 +4,7 @@ export interface Employee {
   section: string;
   grp: string;
   location: string;
+  off_day: string;
   active?: boolean;
 }
 
