@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     const month = searchParams.get('month');
 
     const employees = await sql`
-      SELECT id, name, section, grp, location, COALESCE(off_day, '') as off_day 
+      SELECT id, name, section, grp, location 
       FROM employees 
       WHERE active = true 
       ORDER BY grp, section, name
