@@ -100,15 +100,53 @@ export default function DailyAttendance() {
     setEmployees((prev) =>
       prev.map((e) => (e.id === empId ? { ...e, off_day: dayOff } : e))
     );
+
+    // Auto-apply "O" if current date matches the new day off (today/future only)
+    if (isTodayOrFuture(date)) {
+      const dayName = getDayName(date);
+      if (dayOff === dayName) {
+        // Set status to "O" if no status is currently set
+        if (!attendance[empId]) {
+          setAttendance((prev) => ({ ...prev, [empId]: "O" }));
+        }
+      } else {
+        // If status was auto-set to "O" and user changed day off, clear it
+        if (attendance[empId] === "O" && !originalAttendance[empId]) {
+          setAttendance((prev) => {
+            const copy = { ...prev };
+            delete copy[empId];
+            return copy;
+          });
+        }
+      }
+    }
+
     try {
-      await fetch("/api/employees", {
+      const res = await fetch("/api/employees", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: empId, off_day: dayOff }),
       });
+      if (!res.ok) {
+        console.error("Failed to save day off:", await res.text());
+      }
     } catch (error) {
       console.error("Failed to update day off:", error);
     }
+  };
+
+  // Get the day name for a given date string (e.g., "2026-06-01" -> "Sunday")
+  const getDayName = (dateStr: string): string => {
+    const d = new Date(dateStr + "T00:00:00");
+    return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d.getDay()];
+  };
+
+  // Check if a date is today or in the future
+  const isTodayOrFuture = (dateStr: string): boolean => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const d = new Date(dateStr + "T00:00:00");
+    return d >= today;
   };
 
   const fetchData = useCallback(async () => {
@@ -116,8 +154,22 @@ export default function DailyAttendance() {
     try {
       const res = await fetch(`/api/attendance?date=${date}`);
       const data = await res.json();
-      setEmployees(data.employees || []);
-      setAttendance(data.attendance || {});
+      const emps = data.employees || [];
+      const att = data.attendance || {};
+
+      // Auto-apply "O" for employees whose day off matches the selected date
+      // Only for today and future dates, and only if no status is already saved
+      if (isTodayOrFuture(date)) {
+        const dayName = getDayName(date);
+        for (const emp of emps) {
+          if (emp.off_day && emp.off_day === dayName && !att[emp.id]) {
+            att[emp.id] = "O";
+          }
+        }
+      }
+
+      setEmployees(emps);
+      setAttendance(att);
       setOriginalAttendance(data.attendance || {});
     } catch (error) {
       console.error("Failed to fetch:", error);
@@ -429,27 +481,27 @@ export default function DailyAttendance() {
             onClick={markAllPresent}
             className="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition"
           >
-            ✓ Mark All Present
+            Mark All Present
           </button>
           <button
             onClick={saveAttendance}
             disabled={saving}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-50"
           >
-            {saving ? "Saving..." : "💾 Save"}
+            {saving ? "Saving..." : "Save"}
           </button>
           <button
             onClick={exportPDF}
             className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition"
           >
-            📄 Export PDF
+            Export PDF
           </button>
           {!confirmReset ? (
             <button
               onClick={() => setConfirmReset(true)}
               className="bg-red-500 hover:bg-red-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition"
             >
-              🗑 Reset Day
+              Reset Day
             </button>
           ) : (
             <div className="flex gap-1">
