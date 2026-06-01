@@ -32,10 +32,10 @@ export default function EmployeeManagement() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [search, setSearch] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newEmployee, setNewEmployee] = useState({ name: "", section: SECTIONS[0], grp: ALL_GROUPS[0], location: "" });
+  const [newEmployee, setNewEmployee] = useState({ name: "", section: SECTIONS[0], grp: ALL_GROUPS[0], location: "", off_day: "" });
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editData, setEditData] = useState({ name: "", section: "", grp: "", location: "" });
+  const [editData, setEditData] = useState({ name: "", section: "", grp: "", location: "", off_day: "" });
 
   useEffect(() => {
     fetchEmployees();
@@ -63,7 +63,7 @@ export default function EmployeeManagement() {
       const data = await res.json();
       if (data.employee) {
         setEmployees([...employees, data.employee]);
-        setNewEmployee({ name: "", section: SECTIONS[0], grp: ALL_GROUPS[0], location: "" });
+        setNewEmployee({ name: "", section: SECTIONS[0], grp: ALL_GROUPS[0], location: "", off_day: "" });
         setShowAddForm(false);
       }
     } catch (error) {
@@ -90,12 +90,12 @@ export default function EmployeeManagement() {
 
   const startEdit = (emp: Employee) => {
     setEditingId(emp.id);
-    setEditData({ name: emp.name, section: emp.section, grp: emp.grp, location: emp.location || "" });
+    setEditData({ name: emp.name, section: emp.section, grp: emp.grp, location: emp.location || "", off_day: emp.off_day || "" });
   };
 
   const cancelEdit = () => {
     setEditingId(null);
-    setEditData({ name: "", section: "", grp: "", location: "" });
+    setEditData({ name: "", section: "", grp: "", location: "", off_day: "" });
   };
 
   const saveEdit = async (id: number) => {
@@ -147,7 +147,7 @@ export default function EmployeeManagement() {
       </div>
 
       {showAddForm && (
-        <form onSubmit={addEmployee} className="bg-white rounded-lg shadow p-4 mb-4 grid grid-cols-1 md:grid-cols-6 gap-3">
+        <form onSubmit={addEmployee} className="bg-white rounded-lg shadow p-4 mb-4 grid grid-cols-1 md:grid-cols-7 gap-3">
           <input
             type="text"
             placeholder="Employee Name"
@@ -181,6 +181,20 @@ export default function EmployeeManagement() {
             onChange={(e) => setNewEmployee({ ...newEmployee, location: e.target.value.toUpperCase() })}
             className="border rounded-lg px-3 py-2 text-sm"
           />
+          <select
+            value={newEmployee.off_day}
+            onChange={(e) => setNewEmployee({ ...newEmployee, off_day: e.target.value })}
+            className="border rounded-lg px-3 py-2 text-sm"
+          >
+            <option value="">No Off Day</option>
+            <option value="Sunday">Sunday</option>
+            <option value="Monday">Monday</option>
+            <option value="Tuesday">Tuesday</option>
+            <option value="Wednesday">Wednesday</option>
+            <option value="Thursday">Thursday</option>
+            <option value="Friday">Friday</option>
+            <option value="Saturday">Saturday</option>
+          </select>
           <button type="submit" className="bg-green-600 hover:bg-green-700 text-white rounded-lg px-4 py-2 text-sm font-medium">
             Add
           </button>
@@ -206,6 +220,7 @@ export default function EmployeeManagement() {
               <th className="text-left px-4 py-3 font-semibold text-gray-600">Section</th>
               <th className="text-left px-4 py-3 font-semibold text-gray-600">Group</th>
               <th className="text-left px-4 py-3 font-semibold text-gray-600">Location</th>
+              <th className="text-left px-4 py-3 font-semibold text-gray-600">Off Day</th>
               <th className="text-left px-4 py-3 font-semibold text-gray-600">Action</th>
             </tr>
           </thead>
@@ -258,6 +273,22 @@ export default function EmployeeManagement() {
                       />
                     </td>
                     <td className="px-4 py-2">
+                      <select
+                        value={editData.off_day}
+                        onChange={(e) => setEditData({ ...editData, off_day: e.target.value })}
+                        className="border rounded px-2 py-1 text-xs w-full"
+                      >
+                        <option value="">No Off Day</option>
+                        <option value="Sunday">Sunday</option>
+                        <option value="Monday">Monday</option>
+                        <option value="Tuesday">Tuesday</option>
+                        <option value="Wednesday">Wednesday</option>
+                        <option value="Thursday">Thursday</option>
+                        <option value="Friday">Friday</option>
+                        <option value="Saturday">Saturday</option>
+                      </select>
+                    </td>
+                    <td className="px-4 py-2">
                       <div className="flex gap-1">
                         <button
                           onClick={() => saveEdit(emp.id)}
@@ -281,6 +312,13 @@ export default function EmployeeManagement() {
                       <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">{emp.grp}</span>
                     </td>
                     <td className="px-4 py-2 text-gray-600">{emp.location || "—"}</td>
+                    <td className="px-4 py-2">
+                      {emp.off_day ? (
+                        <span className="px-2 py-0.5 bg-orange-100 text-orange-800 rounded text-xs font-medium">{emp.off_day}</span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-2">
                       <div className="flex gap-2">
                         <button
