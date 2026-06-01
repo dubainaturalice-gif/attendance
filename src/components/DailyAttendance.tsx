@@ -357,7 +357,7 @@ export default function DailyAttendance() {
       const finalY = maxFinalY + 5;
       const totalEmployees = employees.length;
 
-      const grandTotal = totalP + totalOT + totalO + totalL + totalV;
+      const grandTotal = employees.length; // Grand total = total employee headcount
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (doc as any).autoTable({
@@ -377,7 +377,7 @@ export default function DailyAttendance() {
           { content: grandTotal.toString(), styles: { fontStyle: "bold", halign: "center", textColor: [46, 80, 144], fillColor: [217, 226, 243], fontSize: 6 } },
         ]],
         startY: finalY,
-        margin: { left: 20, right: 20 },
+        margin: { left: 5, right: 5 },
         styles: { cellPadding: 1.5, lineWidth: 0.1, lineColor: [200, 200, 200] },
       });
 
