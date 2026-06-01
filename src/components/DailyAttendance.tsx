@@ -94,6 +94,23 @@ export default function DailyAttendance() {
   const [saveMessage, setSaveMessage] = useState("");
   const [confirmReset, setConfirmReset] = useState(false);
 
+  const DAYS_OF_WEEK = ["", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+  const handleDayOffChange = async (empId: number, dayOff: string) => {
+    setEmployees((prev) =>
+      prev.map((e) => (e.id === empId ? { ...e, off_day: dayOff } : e))
+    );
+    try {
+      await fetch("/api/employees", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: empId, off_day: dayOff }),
+      });
+    } catch (error) {
+      console.error("Failed to update day off:", error);
+    }
+  };
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -470,6 +487,7 @@ export default function DailyAttendance() {
                 <th className="text-left px-3 py-2 font-semibold text-gray-600">Name</th>
                 <th className="text-left px-3 py-2 font-semibold text-gray-600">Section</th>
                 <th className="text-left px-3 py-2 font-semibold text-gray-600">Location</th>
+                <th className="text-center px-3 py-2 font-semibold text-gray-600 w-32">Day Off</th>
                 <th className="text-center px-3 py-2 font-semibold text-gray-600 w-64">Status</th>
               </tr>
             </thead>
@@ -478,7 +496,7 @@ export default function DailyAttendance() {
                 const sColor = SECTION_COLORS[group.section] || "#4472C4";
                 return [
                   <tr key={`section-${gIdx}-${group.section}`}>
-                    <td colSpan={5} className="px-3 py-1.5 font-bold text-white text-xs" style={{ backgroundColor: sColor }}>
+                    <td colSpan={6} className="px-3 py-1.5 font-bold text-white text-xs" style={{ backgroundColor: sColor }}>
                       {group.section} ({group.employees.length})
                     </td>
                   </tr>,
@@ -491,6 +509,19 @@ export default function DailyAttendance() {
                         <td className="px-3 py-1.5 font-medium text-sm">{emp.name}</td>
                         <td className="px-3 py-1.5 text-gray-500 text-xs">{emp.section}</td>
                         <td className="px-3 py-1.5 text-gray-500 text-xs">{emp.location || "—"}</td>
+                        <td className="px-3 py-1.5 text-center">
+                          <select
+                            value={emp.off_day || ""}
+                            onChange={(e) => handleDayOffChange(emp.id, e.target.value)}
+                            className="text-xs border border-gray-300 rounded px-1 py-0.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                          >
+                            {DAYS_OF_WEEK.map((day) => (
+                              <option key={day} value={day}>
+                                {day || "—"}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
                         <td className="px-3 py-1.5">
                           <div className="flex justify-center gap-1">
                             {["P", "OT", "O", "L", "V"].map((s) => {
@@ -520,8 +551,8 @@ export default function DailyAttendance() {
           </table>
           <div className="px-4 py-3 bg-gray-50 text-sm text-gray-500 flex gap-6">
             <span>Total: {filteredEmployees.length}</span>
-            <span className="text-green-600">P: {Object.values(attendance).filter((s) => s.includes("P")).length}</span>
-            <span className="text-orange-600">OT: {Object.values(attendance).filter((s) => s.includes("OT")).length}</span>
+            <span className="text-green-600">P: {Object.values(attendance).filter((s) => s === "P").length}</span>
+            <span className="text-orange-600">OT: {Object.values(attendance).filter((s) => s === "OT").length}</span>
             <span className="text-red-600">O: {Object.values(attendance).filter((s) => s === "O").length}</span>
             <span className="text-blue-600">L: {Object.values(attendance).filter((s) => s === "L").length}</span>
             <span className="text-purple-600">V: {Object.values(attendance).filter((s) => s === "V").length}</span>
