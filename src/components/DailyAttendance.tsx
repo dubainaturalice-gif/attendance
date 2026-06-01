@@ -64,30 +64,8 @@ const COLUMN_HEADER_COLORS: Record<string, string> = {
 };
 
 function toggleStatus(current: string, clicked: string): string {
-  if (clicked === "O" || clicked === "L" || clicked === "V") {
-    return current === clicked ? "" : clicked;
-  }
-  const statuses = current ? current.split(",") : [];
-  if (clicked === "P") {
-    if (statuses.includes("O") || statuses.includes("L") || statuses.includes("V")) return "P";
-    if (statuses.includes("P")) {
-      const remaining = statuses.filter((s) => s !== "P");
-      return remaining.join(",");
-    } else {
-      return [...statuses, "P"].sort((a, b) => (a === "P" ? -1 : 1)).join(",");
-    }
-  }
-  if (clicked === "OT") {
-    if (statuses.includes("O") || statuses.includes("L") || statuses.includes("V")) return "OT";
-    if (statuses.includes("OT")) {
-      const remaining = statuses.filter((s) => s !== "OT");
-      return remaining.join(",");
-    } else {
-      const newStatuses = [...statuses, "OT"];
-      return newStatuses.sort((a, b) => (a === "P" ? -1 : b === "P" ? 1 : 0)).join(",");
-    }
-  }
-  return current;
+  // All statuses are exclusive — click to select, click again to deselect
+  return current === clicked ? "" : clicked;
 }
 
 function formatDateForDisplay(dateStr: string): string {
@@ -293,7 +271,6 @@ export default function DailyAttendance() {
             let statusBgColor: [number, number, number] | undefined = undefined;
             if (status === "P") { statusTextColor = [255, 255, 255]; statusBgColor = [0, 176, 80]; }
             else if (status === "OT") { statusTextColor = [0, 0, 0]; statusBgColor = [255, 192, 0]; }
-            else if (status === "P,OT") { statusTextColor = [255, 255, 255]; statusBgColor = [0, 176, 80]; }
             else if (status === "O") { statusTextColor = [255, 255, 255]; statusBgColor = [255, 165, 0]; }
             else if (status === "L") { statusTextColor = [255, 255, 255]; statusBgColor = [220, 38, 38]; }
             else if (status === "V") { statusTextColor = [255, 255, 255]; statusBgColor = [37, 99, 235]; }
@@ -305,8 +282,8 @@ export default function DailyAttendance() {
               { content: status, styles: { halign: "center", textColor: statusTextColor, fillColor: statusBgColor, fontStyle: "bold", fontSize: 4.5 } },
             ]);
 
-            if (status.includes("P")) totalP++;
-            if (status.includes("OT")) totalOT++;
+            if (status === "P") totalP++;
+            if (status === "OT") totalOT++;
             if (status === "O") totalO++;
             if (status === "L") totalL++;
             if (status === "V") totalV++;
@@ -508,7 +485,6 @@ export default function DailyAttendance() {
                   ...group.employees.map((emp) => {
                     globalSl++;
                     const status = attendance[emp.id] || "";
-                    const statuses = status ? status.split(",") : [];
                     return (
                       <tr key={emp.id} className="border-b hover:bg-gray-50">
                         <td className="px-3 py-1.5 text-gray-400 text-xs">{globalSl}</td>
@@ -518,7 +494,7 @@ export default function DailyAttendance() {
                         <td className="px-3 py-1.5">
                           <div className="flex justify-center gap-1">
                             {["P", "OT", "O", "L", "V"].map((s) => {
-                              const isActive = statuses.includes(s);
+                              const isActive = status === s;
                               let btnClass = "status-btn bg-gray-100 text-gray-600 border-gray-300";
                               if (isActive) {
                                 btnClass = `status-btn active-${s}`;

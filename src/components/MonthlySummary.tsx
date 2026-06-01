@@ -67,7 +67,6 @@ function isFriday(year: number, month: number, day: number): boolean {
 function getStatusBg(status: string): string {
   if (status === "P") return "bg-green-100";
   if (status === "OT") return "bg-yellow-100";
-  if (status === "P,OT") return "bg-gradient-to-r from-green-100 to-yellow-100";
   if (status === "O") return "bg-orange-100";
   if (status === "L") return "bg-red-100";
   if (status === "V") return "bg-blue-100";
@@ -77,7 +76,6 @@ function getStatusBg(status: string): string {
 function getStatusColor(status: string): string {
   if (status === "P") return "#16a34a";
   if (status === "OT") return "#ca8a04";
-  if (status === "P,OT") return "#16a34a";
   if (status === "O") return "#ea580c";
   if (status === "L") return "#dc2626";
   if (status === "V") return "#2563eb";
@@ -158,8 +156,8 @@ export default function MonthlySummary() {
     let p = 0, ot = 0, o = 0, l = 0, v = 0;
     for (let d = 1; d <= daysInMonth; d++) {
       const status = getEmpStatus(empId, d);
-      if (status.includes("P")) p++;
-      if (status.includes("OT")) ot++;
+      if (status === "P") p++;
+      if (status === "OT") ot++;
       if (status === "O") o++;
       if (status === "L") l++;
       if (status === "V") v++;
@@ -280,7 +278,6 @@ export default function MonthlySummary() {
             let bgColor: [number, number, number] | undefined = friday ? [255, 248, 225] : undefined;
             if (status === "P") { textColor = [255, 255, 255]; bgColor = [0, 176, 80]; }
             else if (status === "OT") { textColor = [0, 0, 0]; bgColor = [255, 192, 0]; }
-            else if (status === "P,OT") { textColor = [255, 255, 255]; bgColor = [0, 176, 80]; }
             else if (status === "O") { textColor = [255, 255, 255]; bgColor = [255, 165, 0]; }
             else if (status === "L") { textColor = [255, 255, 255]; bgColor = [220, 38, 38]; }
             else if (status === "V") { textColor = [255, 255, 255]; bgColor = [37, 99, 235]; }
