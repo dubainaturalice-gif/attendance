@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     const month = searchParams.get('month');
 
     const employees = await sql`
-      SELECT id, name, section, grp, location 
+      SELECT id, name, section, grp, location, COALESCE(off_day, '') as off_day
       FROM employees 
       WHERE active = true 
       ORDER BY grp, section, name
@@ -29,7 +29,6 @@ export async function GET(request: Request) {
     }
 
     if (month) {
-      // Fix: calculate correct date range using first day of next month
       const [y, m] = month.split('-').map(Number);
       const startDate = `${month}-01`;
       const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
@@ -100,7 +99,6 @@ export async function DELETE(request: Request) {
     const month = searchParams.get('month');
 
     if (month) {
-      // Fix: calculate correct date range using first day of next month
       const [y, m] = month.split('-').map(Number);
       const startDate = `${month}-01`;
       const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
