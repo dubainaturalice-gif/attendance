@@ -541,13 +541,13 @@ export default function DailyAttendance() {
               })}
             </tbody>
           </table>
+          <span>Total: {filteredEmployees.length}</span>
           <div className="px-4 py-3 bg-gray-50 text-sm text-gray-500 flex gap-6">
             <span className="text-green-600">P: {Object.values(attendance).filter((s) => s.includes("P")).length}</span>
             <span className="text-orange-600">OT: {Object.values(attendance).filter((s) => s.includes("OT")).length}</span>
             <span className="text-red-600">O: {Object.values(attendance).filter((s) => s === "O").length}</span>
             <span className="text-blue-600">L: {Object.values(attendance).filter((s) => s === "L").length}</span>
             <span className="text-purple-600">V: {Object.values(attendance).filter((s) => s === "V").length}</span>
-              <span>Total: {filteredEmployees.length}</span>
           </div>
         </div>
       )}
