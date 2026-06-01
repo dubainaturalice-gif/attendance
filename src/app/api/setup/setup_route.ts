@@ -216,3 +216,8 @@ export async function POST() {
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
+
+// Also handle GET so you can just open /api/setup in the browser
+export async function GET() {
+  return POST();
+}
