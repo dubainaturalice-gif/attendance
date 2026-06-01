@@ -355,24 +355,25 @@ export default function DailyAttendance() {
 
       // Total section at bottom - positioned below the tallest column
       const finalY = maxFinalY + 5;
-      const grandTotal = totalP + totalO + totalL + totalV;
+      const totalEmployees = employees.length;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (doc as any).autoTable({
-        head: [[{ content: "TOTAL", colSpan: 12, styles: { fillColor: [46, 80, 144], textColor: [255, 255, 255], halign: "center", fontSize: 7 } }, "", "", "", "", "", "", "", "", "", "", ""]],
+        head: [[{ content: "TOTAL", colSpan: 14, styles: { fillColor: [46, 80, 144], textColor: [255, 255, 255], halign: "center", fontSize: 7 } }, "", "", "", "", "", "", "", "", "", "", "", "", ""]],
         body: [[
-          { content: "PRESENT:", styles: { fontStyle: "bold", halign: "right", fontSize: 6 } },
+          { content: "Total:", styles: { fontStyle: "bold", halign: "right", fontSize: 6 } },
+          { content: totalEmployees.toString(), styles: { fontStyle: "bold", halign: "center", textColor: [46, 80, 144], fillColor: [217, 226, 243], fontSize: 6 } },
+          { content: "P:", styles: { fontStyle: "bold", halign: "right", fontSize: 6 } },
           { content: totalP.toString(), styles: { fontStyle: "bold", halign: "center", textColor: [0, 176, 80], fillColor: [226, 239, 218], fontSize: 6 } },
-          { content: "OFF:", styles: { fontStyle: "bold", halign: "right", fontSize: 6 } },
-          { content: totalO.toString(), styles: { fontStyle: "bold", halign: "center", textColor: [197, 90, 17], fillColor: [252, 228, 204], fontSize: 6 } },
-          { content: "OVERTIME:", styles: { fontStyle: "bold", halign: "right", fontSize: 6 } },
+          { content: "OT:", styles: { fontStyle: "bold", halign: "right", fontSize: 6 } },
           { content: totalOT.toString(), styles: { fontStyle: "bold", halign: "center", textColor: [191, 143, 0], fillColor: [255, 242, 204], fontSize: 6 } },
-          { content: "LEAVE:", styles: { fontStyle: "bold", halign: "right", fontSize: 6 } },
+          { content: "O:", styles: { fontStyle: "bold", halign: "right", fontSize: 6 } },
+          { content: totalO.toString(), styles: { fontStyle: "bold", halign: "center", textColor: [197, 90, 17], fillColor: [252, 228, 204], fontSize: 6 } },
+          { content: "L:", styles: { fontStyle: "bold", halign: "right", fontSize: 6 } },
           { content: totalL.toString(), styles: { fontStyle: "bold", halign: "center", textColor: [255, 0, 0], fillColor: [255, 217, 217], fontSize: 6 } },
-          { content: "VACATION:", styles: { fontStyle: "bold", halign: "right", fontSize: 6 } },
+          { content: "V:", styles: { fontStyle: "bold", halign: "right", fontSize: 6 } },
           { content: totalV.toString(), styles: { fontStyle: "bold", halign: "center", textColor: [0, 112, 192], fillColor: [214, 228, 240], fontSize: 6 } },
-          { content: "GRAND TOTAL:", styles: { fontStyle: "bold", halign: "right", fontSize: 6 } },
-          { content: grandTotal.toString(), styles: { fontStyle: "bold", halign: "center", textColor: [46, 80, 144], fillColor: [217, 226, 243], fontSize: 6 } },
+          "", "",
         ]],
         startY: finalY,
         margin: { left: 20, right: 20 },
