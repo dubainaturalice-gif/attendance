@@ -29,12 +29,16 @@ export async function GET(request: Request) {
     }
 
     if (month) {
+      // Fix: calculate correct date range using first day of next month
+      const [y, m] = month.split('-').map(Number);
       const startDate = `${month}-01`;
-      const endDate = `${month}-31`;
+      const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+      const endDate = `${nextMonth}-01`;
+
       const attResult = await sql`
         SELECT employee_id, date, status 
         FROM attendance 
-        WHERE date >= ${startDate}::date AND date <= ${endDate}::date
+        WHERE date >= ${startDate}::date AND date < ${endDate}::date
       `;
       const attendance: Record<number, Record<string, string>> = {};
       for (const row of attResult) {
@@ -96,9 +100,12 @@ export async function DELETE(request: Request) {
     const month = searchParams.get('month');
 
     if (month) {
+      // Fix: calculate correct date range using first day of next month
+      const [y, m] = month.split('-').map(Number);
       const startDate = `${month}-01`;
-      const endDate = `${month}-31`;
-      await sql`DELETE FROM attendance WHERE date >= ${startDate}::date AND date <= ${endDate}::date`;
+      const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+      const endDate = `${nextMonth}-01`;
+      await sql`DELETE FROM attendance WHERE date >= ${startDate}::date AND date < ${endDate}::date`;
       return NextResponse.json({ success: true });
     }
 
