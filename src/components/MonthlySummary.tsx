@@ -35,7 +35,6 @@ const SECTION_COLORS: Record<string, string> = {
   "PROD NIGHT - LUXURY ICE": "#BF8F00",
 };
 
-// Flat section order — all employees in same section stay together
 const FLAT_SECTION_ORDER = [
   "ADMIN", "SALES SUPERVISOR", "JELAT",
   "PRODUCTION HEAD", "HYGIENE DEPT",
@@ -50,6 +49,12 @@ const FLAT_SECTION_ORDER = [
 ];
 
 const GROUP_FILTERS = ["ALL", "OFFICE/ADMIN", "ADMIN", "CLEANER", "DRIVERS", "MECHANIC", "SALESMAN", "UMQ FACTORY", "FACTORY/PRODUCTION", "DUBAI FACTORY", "DUBAI FACTORY NIGHT", "FUJAIRAH FACTORY"];
+
+// Map day name to JS getDay() number
+const DAY_NAME_TO_NUM: Record<string, number> = {
+  "Sunday": 0, "Monday": 1, "Tuesday": 2, "Wednesday": 3,
+  "Thursday": 4, "Friday": 5, "Saturday": 6,
+};
 
 function getDaysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
@@ -95,7 +100,7 @@ export default function MonthlySummary() {
   const [attendance, setAttendance] = useState<Record<number, Record<string, string>>>({});
   const [groupFilter, setGroupFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
-  const [clearStep, setClearStep] = useState(0); // 0=idle, 1=confirm
+  const [clearStep, setClearStep] = useState(0);
 
   const monthStr = `${year}-${String(month).padStart(2, "0")}`;
   const daysInMonth = getDaysInMonth(year, month);
@@ -124,7 +129,6 @@ export default function MonthlySummary() {
       filtered = filtered.filter((e) => e.grp === groupFilter);
     }
     return [...filtered].sort((a, b) => {
-      // Sort by flat section order — all same-section employees stay together
       const secA = FLAT_SECTION_ORDER.indexOf(a.section);
       const secB = FLAT_SECTION_ORDER.indexOf(b.section);
       const secAIdx = secA === -1 ? FLAT_SECTION_ORDER.length : secA;
@@ -136,7 +140,6 @@ export default function MonthlySummary() {
 
   const sortedEmployees = getFilteredAndSorted();
 
-  // Group by section for display
   const sections: { section: string; grp: string; employees: Employee[] }[] = [];
   let lastSection = "";
   for (const emp of sortedEmployees) {
@@ -147,15 +150,32 @@ export default function MonthlySummary() {
     sections[sections.length - 1].employees.push(emp);
   }
 
-  const getEmpStatus = (empId: number, day: number): string => {
+  // Get status for an employee on a given day — auto-apply "O" if day matches off_day
+  const getEmpStatus = (emp: Employee, day: number): string => {
+    const dateStr = `${monthStr}-${String(day).padStart(2, "0")}`;
+    const recorded = attendance[emp.id]?.[dateStr] || "";
+    if (recorded) return recorded;
+
+    // Auto-apply "O" if this day of week matches the employee's off_day
+    if (emp.off_day && DAY_NAME_TO_NUM[emp.off_day] !== undefined) {
+      const dayOfWeek = new Date(year, month - 1, day).getDay();
+      if (dayOfWeek === DAY_NAME_TO_NUM[emp.off_day]) {
+        return "O";
+      }
+    }
+    return "";
+  };
+
+  // Legacy helper for totals row (no employee context)
+  const getDateStatus = (empId: number, day: number): string => {
     const dateStr = `${monthStr}-${String(day).padStart(2, "0")}`;
     return attendance[empId]?.[dateStr] || "";
   };
 
-  const getEmpSummary = (empId: number) => {
+  const getEmpSummary = (emp: Employee) => {
     let p = 0, ot = 0, o = 0, l = 0, v = 0;
     for (let d = 1; d <= daysInMonth; d++) {
-      const status = getEmpStatus(empId, d);
+      const status = getEmpStatus(emp, d);
       if (status === "P") p++;
       if (status === "OT") ot++;
       if (status === "O") o++;
@@ -168,7 +188,7 @@ export default function MonthlySummary() {
   // Monthly totals
   const monthlyTotals = { p: 0, ot: 0, o: 0, l: 0, v: 0 };
   sortedEmployees.forEach((emp) => {
-    const s = getEmpSummary(emp.id);
+    const s = getEmpSummary(emp);
     monthlyTotals.p += s.p;
     monthlyTotals.ot += s.ot;
     monthlyTotals.o += s.o;
@@ -202,29 +222,26 @@ export default function MonthlySummary() {
       const jsPDF = jsPDFModule.default;
       await import("jspdf-autotable");
 
-      // Calculate page dimensions to fit ALL content on ONE page
-      const totalRows = sortedEmployees.length + sections.length + 2; // employees + section headers + header + totals
-      const rowHeight = 6; // minCellHeight(4) + cellPadding(0.8*2) + borders
-      const headerHeight = 10; // header row height
-      const titleHeight = 14; // title at Y=10, table starts at Y=14
+      const totalRows = sortedEmployees.length + sections.length + 2;
+      const rowHeight = 6;
+      const headerHeight = 10;
+      const titleHeight = 14;
       const bottomMargin = 5;
-      const neededHeight = titleHeight + headerHeight + (totalRows * rowHeight) + bottomMargin + 20; // +20 buffer
+      const neededHeight = titleHeight + headerHeight + (totalRows * rowHeight) + bottomMargin + 20;
       const pageHeight = Math.max(300, neededHeight);
 
-      const pageWidth = 420; // A3-ish landscape width to fit 31 day columns
+      const pageWidth = 420;
       const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [pageWidth, pageHeight] });
 
-      const title = `STAFF ATTENDANCE — ${monthNames[month - 1].toUpperCase()} ${year} | MONTHLY SUMMARY`;
+      const title = `STAFF ATTENDANCE \u2014 ${monthNames[month - 1].toUpperCase()} ${year} | MONTHLY SUMMARY`;
       doc.setFontSize(10);
       doc.setTextColor(46, 80, 144);
       doc.setFont("helvetica", "bold");
       doc.text(title, pageWidth / 2, 10, { align: "center" });
 
-      // Build table data
       const head: { content: string; styles: Record<string, unknown> }[][] = [];
       const body: (string | { content: string; styles: Record<string, unknown> })[][] = [];
 
-      // Header row
       const headerRow: { content: string; styles: Record<string, unknown> }[] = [
         { content: "SECTION", styles: { fillColor: [46, 80, 144], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 4.5 } },
         { content: "EMPLOYEE", styles: { fillColor: [46, 80, 144], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 4.5 } },
@@ -235,7 +252,8 @@ export default function MonthlySummary() {
         const abbrev = getDayAbbrev(year, month, d);
         const friday = isFriday(year, month, d);
         headerRow.push({
-          content: `${d}\n${abbrev}`,
+          content: `${d}
+${abbrev}`,
           styles: {
             fillColor: friday ? [255, 243, 224] : [46, 80, 144],
             textColor: friday ? [230, 81, 0] : [255, 255, 255],
@@ -253,14 +271,12 @@ export default function MonthlySummary() {
       headerRow.push({ content: "TOTAL", styles: { fillColor: [46, 80, 144], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 4.5, halign: "center" } });
       head.push(headerRow);
 
-      // Data rows
       for (const sec of sections) {
         const sColor = hexToRgb(SECTION_COLORS[sec.section] || "#4472C4");
         const totalCols = 3 + daysInMonth + 6;
 
-        // Section separator row
         const sepRow: (string | { content: string; styles: Record<string, unknown> })[] = [];
-        sepRow.push({ content: `— ${sec.section} —`, colSpan: totalCols, styles: { fillColor: sColor, textColor: [255, 255, 255], fontStyle: "bold", fontSize: 4, halign: "left" } });
+        sepRow.push({ content: `\u2014 ${sec.section} \u2014`, colSpan: totalCols, styles: { fillColor: sColor, textColor: [255, 255, 255], fontStyle: "bold", fontSize: 4, halign: "left" } });
         for (let i = 1; i < totalCols; i++) sepRow.push("");
         body.push(sepRow);
 
@@ -272,7 +288,7 @@ export default function MonthlySummary() {
           ];
 
           for (let d = 1; d <= daysInMonth; d++) {
-            const status = getEmpStatus(emp.id, d);
+            const status = getEmpStatus(emp, d);
             const friday = isFriday(year, month, d);
             let textColor: [number, number, number] = [0, 0, 0];
             let bgColor: [number, number, number] | undefined = friday ? [255, 248, 225] : undefined;
@@ -294,7 +310,7 @@ export default function MonthlySummary() {
             });
           }
 
-          const summary = getEmpSummary(emp.id);
+          const summary = getEmpSummary(emp);
           row.push({ content: summary.p ? summary.p.toString() : "", styles: { fontSize: 4, halign: "center", fontStyle: "bold", textColor: [255, 255, 255], fillColor: summary.p ? [0, 176, 80] : undefined } });
           row.push({ content: summary.ot ? summary.ot.toString() : "", styles: { fontSize: 4, halign: "center", fontStyle: "bold", textColor: [0, 0, 0], fillColor: summary.ot ? [255, 192, 0] : undefined } });
           row.push({ content: summary.o ? summary.o.toString() : "", styles: { fontSize: 4, halign: "center", fontStyle: "bold", textColor: [255, 255, 255], fillColor: summary.o ? [255, 165, 0] : undefined } });
@@ -305,14 +321,13 @@ export default function MonthlySummary() {
         }
       }
 
-      // Monthly totals row
       const totalsRow: (string | { content: string; styles: Record<string, unknown> })[] = [
         { content: "MONTHLY TOTALS", colSpan: 3, styles: { fontStyle: "bold", fontSize: 4.5, fillColor: [217, 226, 243] } },
         "", "",
       ];
       for (let d = 1; d <= daysInMonth; d++) {
         let dayCount = 0;
-        sortedEmployees.forEach((emp) => { if (getEmpStatus(emp.id, d)) dayCount++; });
+        sortedEmployees.forEach((emp) => { if (getEmpStatus(emp, d)) dayCount++; });
         const friday = isFriday(year, month, d);
         totalsRow.push({
           content: dayCount ? dayCount.toString() : "",
@@ -327,7 +342,6 @@ export default function MonthlySummary() {
       totalsRow.push({ content: (monthlyTotals.p + monthlyTotals.ot + monthlyTotals.o).toString(), styles: { fontSize: 4.5, halign: "center", fontStyle: "bold", fillColor: [217, 226, 243] } });
       body.push(totalsRow);
 
-      // Column widths
       const dayColWidth = (pageWidth - 20 - 30 - 45 - 25 - 6 * 10) / daysInMonth;
       const colWidths = [30, 45, 25];
       for (let d = 0; d < daysInMonth; d++) colWidths.push(dayColWidth);
@@ -418,13 +432,13 @@ export default function MonthlySummary() {
                 : "bg-red-700 text-white animate-pulse"
             }`}
           >
-            {clearStep === 0 ? "🗑️ Clear All Monthly" : "⚠️ Click to Confirm"}
+            {clearStep === 0 ? "\ud83d\uddd1\ufe0f Clear All Monthly" : "\u26a0\ufe0f Click to Confirm"}
           </button>
           <button
             onClick={exportPDF}
             className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition"
           >
-            📄 Export PDF
+            \ud83d\udcc4 Export PDF
           </button>
         </div>
       </div>
@@ -475,7 +489,7 @@ export default function MonthlySummary() {
                     </td>
                   </tr>,
                   ...sec.employees.map((emp) => {
-                    const summary = getEmpSummary(emp.id);
+                    const summary = getEmpSummary(emp);
                     return (
                       <tr key={emp.id} className="border-b hover:bg-gray-50">
                         <td className="px-2 py-1 text-gray-400 sticky left-0 bg-white text-[10px]">{emp.section}</td>
@@ -483,7 +497,7 @@ export default function MonthlySummary() {
                         <td className="px-2 py-1 text-gray-500">{emp.location || ""}</td>
                         {Array.from({ length: daysInMonth }, (_, i) => {
                           const d = i + 1;
-                          const status = getEmpStatus(emp.id, d);
+                          const status = getEmpStatus(emp, d);
                           const friday = isFriday(year, month, d);
                           return (
                             <td
@@ -512,7 +526,7 @@ export default function MonthlySummary() {
                   const d = i + 1;
                   let dayCount = 0;
                   sortedEmployees.forEach((emp) => {
-                    if (getEmpStatus(emp.id, d)) dayCount++;
+                    if (getEmpStatus(emp, d)) dayCount++;
                   });
                   const friday = isFriday(year, month, d);
                   return (
