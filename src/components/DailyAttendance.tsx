@@ -101,23 +101,21 @@ export default function DailyAttendance() {
       prev.map((e) => (e.id === empId ? { ...e, off_day: dayOff } : e))
     );
 
-    // Auto-apply "O" if current date matches the new day off (today/future only)
-    if (isTodayOrFuture(date)) {
-      const dayName = getDayName(date);
-      if (dayOff === dayName) {
-        // Set status to "O" if no status is currently set
-        if (!attendance[empId]) {
-          setAttendance((prev) => ({ ...prev, [empId]: "O" }));
-        }
-      } else {
-        // If status was auto-set to "O" and user changed day off, clear it
-        if (attendance[empId] === "O" && !originalAttendance[empId]) {
-          setAttendance((prev) => {
-            const copy = { ...prev };
-            delete copy[empId];
-            return copy;
-          });
-        }
+    // Auto-apply "O" if current date matches the new day off
+    const dayName = getDayName(date);
+    if (dayOff === dayName) {
+      // Set status to "O" if no status or currently "P"
+      if (!attendance[empId] || attendance[empId] === "P") {
+        setAttendance((prev) => ({ ...prev, [empId]: "O" }));
+      }
+    } else {
+      // If status was auto-set to "O" and user changed day off, clear it
+      if (attendance[empId] === "O" && !originalAttendance[empId]) {
+        setAttendance((prev) => {
+          const copy = { ...prev };
+          delete copy[empId];
+          return copy;
+        });
       }
     }
 
@@ -158,11 +156,11 @@ export default function DailyAttendance() {
       const att = data.attendance || {};
 
       // Auto-apply "O" for employees whose day off matches the selected date
-      // Only for today and future dates, and only if no status is already saved
-      if (isTodayOrFuture(date)) {
-        const dayName = getDayName(date);
-        for (const emp of emps) {
-          if (emp.off_day && emp.off_day === dayName && !att[emp.id]) {
+      // Applies to ALL dates (past, present, future) — override empty or "P"
+      const dayName = getDayName(date);
+      for (const emp of emps) {
+        if (emp.off_day && emp.off_day === dayName) {
+          if (!att[emp.id] || att[emp.id] === "P") {
             att[emp.id] = "O";
           }
         }
@@ -198,9 +196,15 @@ export default function DailyAttendance() {
   const markAllPresent = () => {
     const filtered = getFilteredEmployees();
     const updated = { ...attendance };
+    const dayName = getDayName(date);
     filtered.forEach((emp) => {
       if (!updated[emp.id]) {
-        updated[emp.id] = "P";
+        // Set "O" for off-day employees, "P" for others
+        if (emp.off_day && emp.off_day === dayName) {
+          updated[emp.id] = "O";
+        } else {
+          updated[emp.id] = "P";
+        }
       }
     });
     setAttendance(updated);
