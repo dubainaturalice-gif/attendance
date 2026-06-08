@@ -154,15 +154,17 @@ export default function MonthlySummary() {
   const getEmpStatus = (emp: Employee, day: number): string => {
     const dateStr = `${monthStr}-${String(day).padStart(2, "0")}`;
     const recorded = attendance[emp.id]?.[dateStr] || "";
-    if (recorded) return recorded;
 
-    // Auto-apply "O" if this day of week matches the employee's off_day
+    // Check if this day matches the employee's off day
     if (emp.off_day && DAY_NAME_TO_NUM[emp.off_day] !== undefined) {
       const dayOfWeek = new Date(year, month - 1, day).getDay();
       if (dayOfWeek === DAY_NAME_TO_NUM[emp.off_day]) {
-        return "O";
+        // Off day always shows "O" — override empty or "P"
+        if (!recorded || recorded === "P") return "O";
       }
     }
+
+    if (recorded) return recorded;
     return "";
   };
 
