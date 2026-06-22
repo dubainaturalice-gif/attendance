@@ -5,6 +5,7 @@ export interface Employee {
   grp: string;
   location: string;
   off_day: string;
+  on_vacation: boolean;
   active?: boolean;
 }
 
@@ -12,7 +13,7 @@ export interface AttendanceRecord {
   id?: number;
   employee_id: number;
   date: string;
-  status: string; // "P", "OT", "P,OT", "O", "L", "V"
+  status: string; // "P", "OT", "O", "L", "V"
 }
 
 export interface DailyData {
