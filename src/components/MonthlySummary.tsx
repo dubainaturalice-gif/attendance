@@ -50,7 +50,6 @@ const FLAT_SECTION_ORDER = [
 
 const GROUP_FILTERS = ["ALL", "OFFICE/ADMIN", "ADMIN", "CLEANER", "DRIVERS", "MECHANIC", "SALESMAN", "UMQ FACTORY", "FACTORY/PRODUCTION", "DUBAI FACTORY", "DUBAI FACTORY NIGHT", "FUJAIRAH FACTORY"];
 
-// Map day name to JS getDay() number
 const DAY_NAME_TO_NUM: Record<string, number> = {
   "Sunday": 0, "Monday": 1, "Tuesday": 2, "Wednesday": 3,
   "Thursday": 4, "Friday": 5, "Saturday": 6,
@@ -150,28 +149,21 @@ export default function MonthlySummary() {
     sections[sections.length - 1].employees.push(emp);
   }
 
-  // Get status for an employee on a given day — auto-apply "O" if day matches off_day
   const getEmpStatus = (emp: Employee, day: number): string => {
     const dateStr = `${monthStr}-${String(day).padStart(2, "0")}`;
     const recorded = attendance[emp.id]?.[dateStr] || "";
-
-    // Check if this day matches the employee's off day
+    if (emp.on_vacation) {
+      if (!recorded || recorded === "P" || recorded === "O") return "V";
+      return recorded;
+    }
     if (emp.off_day && DAY_NAME_TO_NUM[emp.off_day] !== undefined) {
       const dayOfWeek = new Date(year, month - 1, day).getDay();
       if (dayOfWeek === DAY_NAME_TO_NUM[emp.off_day]) {
-        // Off day always shows "O" — override empty or "P"
         if (!recorded || recorded === "P") return "O";
       }
     }
-
     if (recorded) return recorded;
     return "";
-  };
-
-  // Legacy helper for totals row (no employee context)
-  const getDateStatus = (empId: number, day: number): string => {
-    const dateStr = `${monthStr}-${String(day).padStart(2, "0")}`;
-    return attendance[empId]?.[dateStr] || "";
   };
 
   const getEmpSummary = (emp: Employee) => {
@@ -187,7 +179,6 @@ export default function MonthlySummary() {
     return { p, ot, o, l, v, total: p + ot + o };
   };
 
-  // Monthly totals
   const monthlyTotals = { p: 0, ot: 0, o: 0, l: 0, v: 0 };
   sortedEmployees.forEach((emp) => {
     const s = getEmpSummary(emp);
@@ -493,9 +484,12 @@ ${abbrev}`,
                   ...sec.employees.map((emp) => {
                     const summary = getEmpSummary(emp);
                     return (
-                      <tr key={emp.id} className="border-b hover:bg-gray-50">
+                      <tr key={emp.id} className={`border-b hover:bg-gray-50 ${emp.on_vacation ? "bg-blue-50" : ""}`}>
                         <td className="px-2 py-1 text-gray-400 sticky left-0 bg-white text-[10px]">{emp.section}</td>
-                        <td className="px-2 py-1 font-medium sticky left-[80px] bg-white">{emp.name}</td>
+                        <td className="px-2 py-1 font-medium sticky left-[80px] bg-white">
+                          {emp.name}
+                          {emp.on_vacation && <span className="ml-1 text-[9px] text-blue-600 font-bold">[V]</span>}
+                        </td>
                         <td className="px-2 py-1 text-gray-500">{emp.location || ""}</td>
                         {Array.from({ length: daysInMonth }, (_, i) => {
                           const d = i + 1;
