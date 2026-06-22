@@ -96,55 +96,84 @@ export default function DailyAttendance() {
 
   const DAYS_OF_WEEK = ["", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
+  const getDayName = (dateStr: string): string => {
+    const d = new Date(dateStr + "T00:00:00");
+    return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d.getDay()];
+  };
+
   const handleDayOffChange = async (empId: number, dayOff: string) => {
     setEmployees((prev) =>
       prev.map((e) => (e.id === empId ? { ...e, off_day: dayOff } : e))
     );
-
-    // Auto-apply "O" if current date matches the new day off
-    const dayName = getDayName(date);
-    if (dayOff === dayName) {
-      // Set status to "O" if no status or currently "P"
-      if (!attendance[empId] || attendance[empId] === "P") {
-        setAttendance((prev) => ({ ...prev, [empId]: "O" }));
-      }
-    } else {
-      // If status was auto-set to "O" and user changed day off, clear it
-      if (attendance[empId] === "O" && !originalAttendance[empId]) {
-        setAttendance((prev) => {
-          const copy = { ...prev };
-          delete copy[empId];
-          return copy;
-        });
+    const emp = employees.find(e => e.id === empId);
+    if (!emp?.on_vacation) {
+      const dayName = getDayName(date);
+      if (dayOff === dayName) {
+        if (!attendance[empId] || attendance[empId] === "P") {
+          setAttendance((prev) => ({ ...prev, [empId]: "O" }));
+        }
+      } else {
+        if (attendance[empId] === "O" && !originalAttendance[empId]) {
+          setAttendance((prev) => {
+            const copy = { ...prev };
+            delete copy[empId];
+            return copy;
+          });
+        }
       }
     }
-
     try {
       const res = await fetch("/api/employees", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: empId, off_day: dayOff }),
       });
-      if (!res.ok) {
-        console.error("Failed to save day off:", await res.text());
-      }
+      if (!res.ok) console.error("Failed to save day off:", await res.text());
     } catch (error) {
       console.error("Failed to update day off:", error);
     }
   };
 
-  // Get the day name for a given date string (e.g., "2026-06-01" -> "Sunday")
-  const getDayName = (dateStr: string): string => {
-    const d = new Date(dateStr + "T00:00:00");
-    return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d.getDay()];
-  };
-
-  // Check if a date is today or in the future
-  const isTodayOrFuture = (dateStr: string): boolean => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const d = new Date(dateStr + "T00:00:00");
-    return d >= today;
+  const handleVacationChange = async (empId: number, onVacation: boolean) => {
+    setEmployees((prev) =>
+      prev.map((e) => (e.id === empId ? { ...e, on_vacation: onVacation } : e))
+    );
+    if (onVacation) {
+      const currentStatus = attendance[empId] || "";
+      if (!currentStatus || currentStatus === "P" || currentStatus === "O") {
+        setAttendance((prev) => ({ ...prev, [empId]: "V" }));
+      }
+    } else {
+      const dayName = getDayName(date);
+      const emp = employees.find(e => e.id === empId);
+      if (attendance[empId] === "V" && !originalAttendance[empId]) {
+        if (emp?.off_day && emp.off_day === dayName) {
+          setAttendance((prev) => ({ ...prev, [empId]: "O" }));
+        } else {
+          setAttendance((prev) => {
+            const copy = { ...prev };
+            delete copy[empId];
+            return copy;
+          });
+        }
+      } else if (attendance[empId] === "V" && originalAttendance[empId] === "V") {
+        if (emp?.off_day && emp.off_day === dayName) {
+          setAttendance((prev) => ({ ...prev, [empId]: "O" }));
+        } else {
+          setAttendance((prev) => ({ ...prev, [empId]: "" }));
+        }
+      }
+    }
+    try {
+      const res = await fetch("/api/employees", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: empId, on_vacation: onVacation }),
+      });
+      if (!res.ok) console.error("Failed to save vacation:", await res.text());
+    } catch (error) {
+      console.error("Failed to update vacation:", error);
+    }
   };
 
   const fetchData = useCallback(async () => {
@@ -154,18 +183,18 @@ export default function DailyAttendance() {
       const data = await res.json();
       const emps = data.employees || [];
       const att = data.attendance || {};
-
-      // Auto-apply "O" for employees whose day off matches the selected date
-      // Applies to ALL dates (past, present, future) — override empty or "P"
       const dayName = getDayName(date);
       for (const emp of emps) {
-        if (emp.off_day && emp.off_day === dayName) {
+        if (emp.on_vacation) {
+          if (!att[emp.id] || att[emp.id] === "P" || att[emp.id] === "O") {
+            att[emp.id] = "V";
+          }
+        } else if (emp.off_day && emp.off_day === dayName) {
           if (!att[emp.id] || att[emp.id] === "P") {
             att[emp.id] = "O";
           }
         }
       }
-
       setEmployees(emps);
       setAttendance(att);
       setOriginalAttendance(data.attendance || {});
@@ -199,8 +228,9 @@ export default function DailyAttendance() {
     const dayName = getDayName(date);
     filtered.forEach((emp) => {
       if (!updated[emp.id]) {
-        // Set "O" for off-day employees, "P" for others
-        if (emp.off_day && emp.off_day === dayName) {
+        if (emp.on_vacation) {
+          updated[emp.id] = "V";
+        } else if (emp.off_day && emp.off_day === dayName) {
           updated[emp.id] = "O";
         } else {
           updated[emp.id] = "P";
@@ -269,10 +299,7 @@ export default function DailyAttendance() {
       const jsPDFModule = await import("jspdf");
       const jsPDF = jsPDFModule.default;
       await import("jspdf-autotable");
-
       const dateDisplay = formatDateForDisplay(date);
-
-      // Build columns
       const columnEmployees: Record<string, Employee[]> = {};
       for (const colTitle of PDF_COLUMN_ORDER) columnEmployees[colTitle] = [];
       for (const emp of employees) {
@@ -280,64 +307,44 @@ export default function DailyAttendance() {
         if (!columnEmployees[colTitle]) columnEmployees[colTitle] = [];
         columnEmployees[colTitle].push(emp);
       }
-
-      // Find the tallest column to determine page height
       let maxRows = 0;
       for (const colTitle of PDF_COLUMN_ORDER) {
         const emps = columnEmployees[colTitle];
-        // Count section headers
         const secs = new Set(emps.map(e => e.section));
-        const rows = emps.length + secs.size + 2; // +2 for col header + sub header
+        const rows = emps.length + secs.size + 2;
         if (rows > maxRows) maxRows = rows;
       }
-
       const rowH = 4.2;
-      const neededHeight = 25 + (maxRows * rowH) + 30; // title + rows + totals
+      const neededHeight = 25 + (maxRows * rowH) + 30;
       const pageHeight = Math.max(210, neededHeight);
       const numCols = PDF_COLUMN_ORDER.length;
-      const pageWidth = numCols <= 5 ? 297 : 350; // wider for 6+ columns
+      const pageWidth = numCols <= 5 ? 297 : 350;
       const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [pageWidth, pageHeight] });
-
-      // Title
       doc.setFontSize(11);
       doc.setTextColor(46, 80, 144);
       doc.setFont("helvetica", "bold");
       doc.text(dateDisplay, pageWidth / 2, 10, { align: "center" });
-
-      // Totals tracking
       let totalP = 0, totalOT = 0, totalO = 0, totalL = 0, totalV = 0;
       let maxFinalY = 0;
-
-      const colWidth = (pageWidth - 20) / numCols; // dynamic columns with margins
+      const colWidth = (pageWidth - 20) / numCols;
       const startY = 15;
-
       for (let colIdx = 0; colIdx < PDF_COLUMN_ORDER.length; colIdx++) {
         const colTitle = PDF_COLUMN_ORDER[colIdx];
         const colEmps = columnEmployees[colTitle] || [];
         const colColor = hexToRgb(COLUMN_HEADER_COLORS[colTitle] || "#2E5090");
         const x = 5 + colIdx * colWidth;
-
-        // Group by section
         const sectionMap: Record<string, Employee[]> = {};
         for (const emp of colEmps) {
           if (!sectionMap[emp.section]) sectionMap[emp.section] = [];
           sectionMap[emp.section].push(emp);
         }
-
-        // Build table body
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const body: any[][] = [];
-
         let sl = 1;
         for (const section of Object.keys(sectionMap)) {
           const sectionEmps = sectionMap[section];
           const sColor = hexToRgb(SECTION_COLORS[section] || "#4472C4");
-
-          // Section header
-          body.push([{
-            content: section, colSpan: 4, styles: { fillColor: sColor, textColor: [255, 255, 255], fontStyle: "bold", fontSize: 4.5 }
-          }, "", "", ""]);
-
+          body.push([{ content: section, colSpan: 4, styles: { fillColor: sColor, textColor: [255, 255, 255], fontStyle: "bold", fontSize: 4.5 } }, "", "", ""]);
           for (const emp of sectionEmps) {
             const status = attendance[emp.id] || "";
             let statusTextColor: [number, number, number] = [0, 0, 0];
@@ -347,14 +354,12 @@ export default function DailyAttendance() {
             else if (status === "O") { statusTextColor = [255, 255, 255]; statusBgColor = [255, 165, 0]; }
             else if (status === "L") { statusTextColor = [255, 255, 255]; statusBgColor = [220, 38, 38]; }
             else if (status === "V") { statusTextColor = [255, 255, 255]; statusBgColor = [37, 99, 235]; }
-
             body.push([
               { content: sl.toString(), styles: { halign: "center", fontSize: 4 } },
               { content: emp.name, styles: { fontSize: 4 } },
               { content: emp.location || "", styles: { fontSize: 4 } },
               { content: status, styles: { halign: "center", textColor: statusTextColor, fillColor: statusBgColor, fontStyle: "bold", fontSize: 4.5 } },
             ]);
-
             if (status === "P") totalP++;
             if (status === "OT") totalOT++;
             if (status === "O") totalO++;
@@ -363,11 +368,9 @@ export default function DailyAttendance() {
             sl++;
           }
         }
-
         if (colEmps.length === 0) {
           body.push([{ content: "No employees", colSpan: 4, styles: { fontSize: 4, textColor: [150, 150, 150], halign: "center", fontStyle: "italic" } }, "", "", ""]);
         }
-
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (doc as any).autoTable({
           head: [
@@ -383,32 +386,15 @@ export default function DailyAttendance() {
           startY: startY,
           margin: { left: x, right: pageWidth - x - colWidth + 2 },
           tableWidth: colWidth - 3,
-          styles: {
-            fontSize: 4,
-            cellPadding: 0.8,
-            lineWidth: 0.1,
-            lineColor: [200, 200, 200],
-          },
-          columnStyles: {
-            0: { cellWidth: 7 },
-            1: { cellWidth: colWidth - 35 },
-            2: { cellWidth: 18 },
-            3: { cellWidth: 10 },
-          },
+          styles: { fontSize: 4, cellPadding: 0.8, lineWidth: 0.1, lineColor: [200, 200, 200] },
+          columnStyles: { 0: { cellWidth: 7 }, 1: { cellWidth: colWidth - 35 }, 2: { cellWidth: 18 }, 3: { cellWidth: 10 } },
         });
-
-        // Track the bottom of each column table
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const colFinalY = (doc as any).lastAutoTable?.finalY || 0;
         if (colFinalY > maxFinalY) maxFinalY = colFinalY;
       }
-
-      // Total section at bottom - positioned below the tallest column
       const finalY = maxFinalY + 5;
-      const totalEmployees = employees.length;
-
-      const grandTotal = employees.length; // Grand total = total employee headcount
-
+      const grandTotal = employees.length;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (doc as any).autoTable({
         head: [[{ content: "TOTAL", colSpan: 12, styles: { fillColor: [46, 80, 144], textColor: [255, 255, 255], halign: "center", fontSize: 7, fontStyle: "bold" } }, "", "", "", "", "", "", "", "", "", "", ""]],
@@ -430,7 +416,6 @@ export default function DailyAttendance() {
         margin: { left: 5, right: 5 },
         styles: { cellPadding: 1.5, lineWidth: 0.1, lineColor: [200, 200, 200] },
       });
-
       doc.save(`attendance-${date}.pdf`);
     } catch (error) {
       console.error("PDF export failed:", error);
@@ -439,8 +424,6 @@ export default function DailyAttendance() {
   };
 
   const filteredEmployees = getFilteredEmployees();
-
-  // Group employees by section for display
   const groupedEmployees: { section: string; employees: Employee[] }[] = [];
   let currentSection = "";
   for (const emp of filteredEmployees) {
@@ -450,7 +433,6 @@ export default function DailyAttendance() {
     }
     groupedEmployees[groupedEmployees.length - 1].employees.push(emp);
   }
-
   let globalSl = 0;
 
   return (
@@ -458,80 +440,30 @@ export default function DailyAttendance() {
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <div>
           <label className="text-sm font-medium text-gray-600 mr-2">Date:</label>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="border rounded-lg px-3 py-1.5 text-sm"
-          />
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border rounded-lg px-3 py-1.5 text-sm" />
         </div>
         <div className="flex gap-1 flex-wrap">
           {GROUP_FILTERS.map((g) => (
-            <button
-              key={g}
-              onClick={() => setGroupFilter(g)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                groupFilter === g
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-              }`}
-            >
-              {g}
-            </button>
+            <button key={g} onClick={() => setGroupFilter(g)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${groupFilter === g ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}>{g}</button>
           ))}
         </div>
         <div className="flex gap-2 ml-auto">
-          <button
-            onClick={markAllPresent}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition"
-          >
-            Mark All Present
-          </button>
-          <button
-            onClick={saveAttendance}
-            disabled={saving}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save"}
-          </button>
-          <button
-            onClick={exportPDF}
-            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition"
-          >
-            Export PDF
-          </button>
+          <button onClick={markAllPresent} className="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition">Mark All Present</button>
+          <button onClick={saveAttendance} disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-50">{saving ? "Saving..." : "Save"}</button>
+          <button onClick={exportPDF} className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition">Export PDF</button>
           {!confirmReset ? (
-            <button
-              onClick={() => setConfirmReset(true)}
-              className="bg-red-500 hover:bg-red-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition"
-            >
-              Reset Day
-            </button>
+            <button onClick={() => setConfirmReset(true)} className="bg-red-500 hover:bg-red-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition">Reset Day</button>
           ) : (
             <div className="flex gap-1">
-              <button
-                onClick={resetDay}
-                className="bg-red-700 hover:bg-red-800 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition"
-              >
-                Confirm Reset
-              </button>
-              <button
-                onClick={() => setConfirmReset(false)}
-                className="bg-gray-400 hover:bg-gray-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition"
-              >
-                Cancel
-              </button>
+              <button onClick={resetDay} className="bg-red-700 hover:bg-red-800 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition">Confirm Reset</button>
+              <button onClick={() => setConfirmReset(false)} className="bg-gray-400 hover:bg-gray-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition">Cancel</button>
             </div>
           )}
         </div>
       </div>
-
       {saveMessage && (
-        <div className={`mb-3 p-2 rounded-lg text-sm ${saveMessage.includes("failed") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
-          {saveMessage}
-        </div>
+        <div className={`mb-3 p-2 rounded-lg text-sm ${saveMessage.includes("failed") ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>{saveMessage}</div>
       )}
-
       {loading ? (
         <div className="text-center text-gray-500 py-8">Loading attendance data...</div>
       ) : (
@@ -544,6 +476,7 @@ export default function DailyAttendance() {
                 <th className="text-left px-3 py-2 font-semibold text-gray-600">Section</th>
                 <th className="text-left px-3 py-2 font-semibold text-gray-600">Location</th>
                 <th className="text-center px-3 py-2 font-semibold text-gray-600 w-32">Day Off</th>
+                <th className="text-center px-3 py-2 font-semibold text-gray-600 w-20">Vacation</th>
                 <th className="text-center px-3 py-2 font-semibold text-gray-600 w-64">Status</th>
               </tr>
             </thead>
@@ -552,49 +485,39 @@ export default function DailyAttendance() {
                 const sColor = SECTION_COLORS[group.section] || "#4472C4";
                 return [
                   <tr key={`section-${gIdx}-${group.section}`}>
-                    <td colSpan={6} className="px-3 py-1.5 font-bold text-white text-xs" style={{ backgroundColor: sColor }}>
-                      {group.section} ({group.employees.length})
-                    </td>
+                    <td colSpan={7} className="px-3 py-1.5 font-bold text-white text-xs" style={{ backgroundColor: sColor }}>{group.section} ({group.employees.length})</td>
                   </tr>,
                   ...group.employees.map((emp) => {
                     globalSl++;
                     const status = attendance[emp.id] || "";
+                    const isOnVacation = emp.on_vacation || false;
                     return (
-                      <tr key={emp.id} className="border-b hover:bg-gray-50">
+                      <tr key={emp.id} className={`border-b hover:bg-gray-50 ${isOnVacation ? "bg-blue-50" : ""}`}>
                         <td className="px-3 py-1.5 text-gray-400 text-xs">{globalSl}</td>
                         <td className="px-3 py-1.5 font-medium text-sm">{emp.name}</td>
                         <td className="px-3 py-1.5 text-gray-500 text-xs">{emp.section}</td>
-                        <td className="px-3 py-1.5 text-gray-500 text-xs">{emp.location || "—"}</td>
+                        <td className="px-3 py-1.5 text-gray-500 text-xs">{emp.location || "\u2014"}</td>
                         <td className="px-3 py-1.5 text-center">
-                          <select
-                            value={emp.off_day || ""}
-                            onChange={(e) => handleDayOffChange(emp.id, e.target.value)}
-                            className="text-xs border border-gray-300 rounded px-1 py-0.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                          >
-                            {DAYS_OF_WEEK.map((day) => (
-                              <option key={day} value={day}>
-                                {day || "—"}
-                              </option>
-                            ))}
+                          <select value={emp.off_day || ""} onChange={(e) => handleDayOffChange(emp.id, e.target.value)} className="text-xs border border-gray-300 rounded px-1 py-0.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400">
+                            {DAYS_OF_WEEK.map((day) => (<option key={day} value={day}>{day || "\u2014"}</option>))}
                           </select>
+                        </td>
+                        <td className="px-3 py-1.5 text-center">
+                          <label className="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" checked={isOnVacation} onChange={(e) => handleVacationChange(emp.id, e.target.checked)} className="sr-only peer" />
+                            <div className={`relative w-9 h-5 rounded-full peer transition-colors ${isOnVacation ? "bg-blue-600" : "bg-gray-300"}`}>
+                              <div className={`absolute top-0.5 left-0.5 bg-white w-4 h-4 rounded-full transition-transform ${isOnVacation ? "translate-x-4" : ""}`}></div>
+                            </div>
+                            {isOnVacation && <span className="ml-1 text-xs font-bold text-blue-600">V</span>}
+                          </label>
                         </td>
                         <td className="px-3 py-1.5">
                           <div className="flex justify-center gap-1">
                             {["P", "OT", "O", "L", "V"].map((s) => {
                               const isActive = status === s;
                               let btnClass = "status-btn bg-gray-100 text-gray-600 border-gray-300";
-                              if (isActive) {
-                                btnClass = `status-btn active-${s}`;
-                              }
-                              return (
-                                <button
-                                  key={s}
-                                  onClick={() => handleStatusClick(emp.id, s)}
-                                  className={btnClass}
-                                >
-                                  {s}
-                                </button>
-                              );
+                              if (isActive) btnClass = `status-btn active-${s}`;
+                              return (<button key={s} onClick={() => handleStatusClick(emp.id, s)} className={btnClass}>{s}</button>);
                             })}
                           </div>
                         </td>
