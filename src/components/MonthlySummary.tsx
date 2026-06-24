@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Employee } from "@/lib/types";
+import { Employee, VacationPeriod } from "@/lib/types";
 
 const SECTION_COLORS: Record<string, string> = {
   "ADMIN": "#4472C4",
@@ -97,6 +97,7 @@ export default function MonthlySummary() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendance, setAttendance] = useState<Record<number, Record<string, string>>>({});
+  const [vacationPeriods, setVacationPeriods] = useState<VacationPeriod[]>([]);
   const [groupFilter, setGroupFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
   const [clearStep, setClearStep] = useState(0);
@@ -105,6 +106,21 @@ export default function MonthlySummary() {
   const daysInMonth = getDaysInMonth(year, month);
   const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
+  // Check if a date is within any vacation period for an employee
+  const isDateInVacation = useCallback((empId: number, dateStr: string): boolean => {
+    return vacationPeriods.some((vp) => {
+      if (vp.employee_id !== empId) return false;
+      if (dateStr < vp.start_date) return false;
+      if (vp.end_date && dateStr > vp.end_date) return false;
+      return true;
+    });
+  }, [vacationPeriods]);
+
+  // Check if employee has active vacation
+  const hasActiveVacation = useCallback((empId: number): boolean => {
+    return vacationPeriods.some((vp) => vp.employee_id === empId && !vp.end_date);
+  }, [vacationPeriods]);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -112,6 +128,7 @@ export default function MonthlySummary() {
       const data = await res.json();
       setEmployees(data.employees || []);
       setAttendance(data.attendance || {});
+      setVacationPeriods(data.vacationPeriods || []);
     } catch (error) {
       console.error("Failed to fetch:", error);
     }
@@ -152,10 +169,12 @@ export default function MonthlySummary() {
   const getEmpStatus = (emp: Employee, day: number): string => {
     const dateStr = `${monthStr}-${String(day).padStart(2, "0")}`;
     const recorded = attendance[emp.id]?.[dateStr] || "";
-    if (emp.on_vacation) {
-      if (!recorded || recorded === "P" || recorded === "O") return "V";
-      return recorded;
+    // Check vacation periods
+    if (isDateInVacation(emp.id, dateStr)) {
+      if (recorded === "OT" || recorded === "L") return recorded;
+      return "V";
     }
+    // Check day off
     if (emp.off_day && DAY_NAME_TO_NUM[emp.off_day] !== undefined) {
       const dayOfWeek = new Date(year, month - 1, day).getDay();
       if (dayOfWeek === DAY_NAME_TO_NUM[emp.off_day]) {
@@ -483,12 +502,13 @@ ${abbrev}`,
                   </tr>,
                   ...sec.employees.map((emp) => {
                     const summary = getEmpSummary(emp);
+                    const activeVac = hasActiveVacation(emp.id);
                     return (
-                      <tr key={emp.id} className={`border-b hover:bg-gray-50 ${emp.on_vacation ? "bg-blue-50" : ""}`}>
+                      <tr key={emp.id} className={`border-b hover:bg-gray-50 ${activeVac ? "bg-blue-50" : ""}`}>
                         <td className="px-2 py-1 text-gray-400 sticky left-0 bg-white text-[10px]">{emp.section}</td>
                         <td className="px-2 py-1 font-medium sticky left-[80px] bg-white">
                           {emp.name}
-                          {emp.on_vacation && <span className="ml-1 text-[9px] text-blue-600 font-bold">[V]</span>}
+                          {activeVac && <span className="ml-1 text-[9px] text-blue-600 font-bold">[V]</span>}
                         </td>
                         <td className="px-2 py-1 text-gray-500">{emp.location || ""}</td>
                         {Array.from({ length: daysInMonth }, (_, i) => {
