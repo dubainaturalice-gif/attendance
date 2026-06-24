@@ -37,7 +37,6 @@ const SECTION_COLORS: Record<string, string> = {
   "PROD NIGHT - LUXURY ICE": "#BF8F00",
 };
 
-// Map groups to PDF column titles
 const PDF_COLUMN_MAP: Record<string, string> = {
   "ADMIN": "ADMIN",
   "OFFICE/ADMIN": "ADMIN",
@@ -93,6 +92,12 @@ export default function DailyAttendance() {
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [confirmReset, setConfirmReset] = useState(false);
+  // Vacation management modal
+  const [manageVacEmpId, setManageVacEmpId] = useState<number | null>(null);
+  const [editPeriodId, setEditPeriodId] = useState<number | null>(null);
+  const [editStart, setEditStart] = useState("");
+  const [editEnd, setEditEnd] = useState("");
+  const [vacSaving, setVacSaving] = useState(false);
 
   const DAYS_OF_WEEK = ["", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -101,7 +106,6 @@ export default function DailyAttendance() {
     return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d.getDay()];
   };
 
-  // Check if a specific date falls within any vacation period for an employee
   const isDateInVacation = useCallback((empId: number, dateStr: string, periods?: VacationPeriod[]): boolean => {
     const p = periods || vacationPeriods;
     return p.some((vp) => {
@@ -112,7 +116,6 @@ export default function DailyAttendance() {
     });
   }, [vacationPeriods]);
 
-  // Check if employee has an active (open-ended) vacation period
   const hasActiveVacation = useCallback((empId: number, periods?: VacationPeriod[]): boolean => {
     const p = periods || vacationPeriods;
     return p.some((vp) => vp.employee_id === empId && !vp.end_date);
@@ -153,7 +156,6 @@ export default function DailyAttendance() {
 
   const handleVacationChange = async (empId: number, activate: boolean) => {
     if (activate) {
-      // Start a new vacation period from the selected date
       try {
         const res = await fetch("/api/vacation", {
           method: "POST",
@@ -163,7 +165,6 @@ export default function DailyAttendance() {
         if (res.ok) {
           const data = await res.json();
           setVacationPeriods((prev) => [...prev, data.period]);
-          // Set V for current date
           const currentStatus = attendance[empId] || "";
           if (!currentStatus || currentStatus === "P" || currentStatus === "O") {
             setAttendance((prev) => ({ ...prev, [empId]: "V" }));
@@ -176,7 +177,6 @@ export default function DailyAttendance() {
         console.error("Failed to start vacation:", error);
       }
     } else {
-      // End the active vacation period on the selected date
       try {
         const res = await fetch("/api/vacation", {
           method: "PUT",
@@ -192,8 +192,6 @@ export default function DailyAttendance() {
                 : p
             )
           );
-          // The current date is still within the closed period (end_date = today)
-          // so V should remain. No status change needed.
         } else {
           const err = await res.json();
           console.error("Failed to end vacation:", err.error);
@@ -202,6 +200,68 @@ export default function DailyAttendance() {
         console.error("Failed to end vacation:", error);
       }
     }
+  };
+
+  const handleDeletePeriod = async (periodId: number) => {
+    setVacSaving(true);
+    try {
+      const res = await fetch("/api/vacation", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: periodId }),
+      });
+      if (res.ok) {
+        setVacationPeriods((prev) => prev.filter((p) => p.id !== periodId));
+        if (editPeriodId === periodId) {
+          setEditPeriodId(null);
+        }
+      } else {
+        const err = await res.json();
+        alert("Failed to delete: " + err.error);
+      }
+    } catch (error) {
+      console.error("Delete failed:", error);
+      alert("Failed to delete vacation period");
+    }
+    setVacSaving(false);
+  };
+
+  const handleStartEdit = (period: VacationPeriod) => {
+    setEditPeriodId(period.id);
+    setEditStart(period.start_date);
+    setEditEnd(period.end_date || "");
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editPeriodId || !editStart) return;
+    setVacSaving(true);
+    try {
+      const body: Record<string, unknown> = { id: editPeriodId, start_date: editStart };
+      if (editEnd) {
+        body.end_date = editEnd;
+      } else {
+        body.end_date = null;
+      }
+      const res = await fetch("/api/vacation", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setVacationPeriods((prev) =>
+          prev.map((p) => p.id === editPeriodId ? data.period : p)
+        );
+        setEditPeriodId(null);
+      } else {
+        const err = await res.json();
+        alert("Failed to update: " + err.error);
+      }
+    } catch (error) {
+      console.error("Edit failed:", error);
+      alert("Failed to update vacation period");
+    }
+    setVacSaving(false);
   };
 
   const fetchData = useCallback(async () => {
@@ -214,7 +274,6 @@ export default function DailyAttendance() {
       const periods: VacationPeriod[] = data.vacationPeriods || [];
       const dayName = getDayName(date);
       for (const emp of emps) {
-        // Check vacation periods for this date
         const empOnVac = isDateInVacation(emp.id, date, periods);
         if (empOnVac) {
           if (!att[emp.id] || att[emp.id] === "P" || att[emp.id] === "O") {
@@ -457,6 +516,14 @@ export default function DailyAttendance() {
     }
   };
 
+  // Get vacation periods for a specific employee
+  const getEmpVacationPeriods = (empId: number): VacationPeriod[] => {
+    return vacationPeriods.filter((p) => p.employee_id === empId).sort((a, b) => a.start_date.localeCompare(b.start_date));
+  };
+
+  const manageEmpName = manageVacEmpId ? employees.find((e) => e.id === manageVacEmpId)?.name || "" : "";
+  const manageEmpPeriods = manageVacEmpId ? getEmpVacationPeriods(manageVacEmpId) : [];
+
   const filteredEmployees = getFilteredEmployees();
   const groupedEmployees: { section: string; employees: Employee[] }[] = [];
   let currentSection = "";
@@ -510,7 +577,7 @@ export default function DailyAttendance() {
                 <th className="text-left px-3 py-2 font-semibold text-gray-600">Section</th>
                 <th className="text-left px-3 py-2 font-semibold text-gray-600">Location</th>
                 <th className="text-center px-3 py-2 font-semibold text-gray-600 w-32">Day Off</th>
-                <th className="text-center px-3 py-2 font-semibold text-gray-600 w-20">Vacation</th>
+                <th className="text-center px-3 py-2 font-semibold text-gray-600 w-28">Vacation</th>
                 <th className="text-center px-3 py-2 font-semibold text-gray-600 w-64">Status</th>
               </tr>
             </thead>
@@ -526,6 +593,7 @@ export default function DailyAttendance() {
                     const status = attendance[emp.id] || "";
                     const isOnVac = hasActiveVacation(emp.id);
                     const dateOnVac = isDateInVacation(emp.id, date);
+                    const empPeriodCount = vacationPeriods.filter((p) => p.employee_id === emp.id).length;
                     return (
                       <tr key={emp.id} className={`border-b hover:bg-gray-50 ${dateOnVac ? "bg-blue-50" : ""}`}>
                         <td className="px-3 py-1.5 text-gray-400 text-xs">{globalSl}</td>
@@ -538,14 +606,25 @@ export default function DailyAttendance() {
                           </select>
                         </td>
                         <td className="px-3 py-1.5 text-center">
-                          <label className="inline-flex items-center cursor-pointer">
-                            <input type="checkbox" checked={isOnVac} onChange={(e) => handleVacationChange(emp.id, e.target.checked)} className="sr-only peer" />
-                            <div className={`relative w-9 h-5 rounded-full peer transition-colors ${isOnVac ? "bg-blue-600" : dateOnVac ? "bg-green-500" : "bg-gray-300"}`}>
-                              <div className={`absolute top-0.5 left-0.5 bg-white w-4 h-4 rounded-full transition-transform ${isOnVac ? "translate-x-4" : ""}`}></div>
-                            </div>
-                            {isOnVac && <span className="ml-1 text-xs font-bold text-blue-600">V</span>}
-                            {!isOnVac && dateOnVac && <span className="ml-1 text-[9px] text-green-600">\u2714</span>}
-                          </label>
+                          <div className="flex items-center justify-center gap-1">
+                            <label className="inline-flex items-center cursor-pointer">
+                              <input type="checkbox" checked={isOnVac} onChange={(e) => handleVacationChange(emp.id, e.target.checked)} className="sr-only peer" />
+                              <div className={`relative w-9 h-5 rounded-full peer transition-colors ${isOnVac ? "bg-blue-600" : dateOnVac ? "bg-green-500" : "bg-gray-300"}`}>
+                                <div className={`absolute top-0.5 left-0.5 bg-white w-4 h-4 rounded-full transition-transform ${isOnVac ? "translate-x-4" : ""}`}></div>
+                              </div>
+                              {isOnVac && <span className="ml-1 text-xs font-bold text-blue-600">V</span>}
+                              {!isOnVac && dateOnVac && <span className="ml-1 text-[9px] text-green-600">{"\u2714"}</span>}
+                            </label>
+                            {empPeriodCount > 0 && (
+                              <button
+                                onClick={() => { setManageVacEmpId(emp.id); setEditPeriodId(null); }}
+                                className="ml-1 text-[10px] bg-blue-100 hover:bg-blue-200 text-blue-700 rounded px-1.5 py-0.5 font-medium transition"
+                                title="Manage vacation periods"
+                              >
+                                {"\u270E"} {empPeriodCount}
+                              </button>
+                            )}
+                          </div>
                         </td>
                         <td className="px-3 py-1.5">
                           <div className="flex justify-center gap-1">
@@ -571,6 +650,68 @@ export default function DailyAttendance() {
             <span className="text-red-600">O: {Object.values(attendance).filter((s) => s === "O").length}</span>
             <span className="text-blue-600">L: {Object.values(attendance).filter((s) => s === "L").length}</span>
             <span className="text-purple-600">V: {Object.values(attendance).filter((s) => s === "V").length}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Vacation Management Modal */}
+      {manageVacEmpId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setManageVacEmpId(null)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-blue-600 text-white px-6 py-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold">{"\uD83C\uDFD6\uFE0F"} Vacation Periods \u2014 {manageEmpName}</h3>
+              <button onClick={() => setManageVacEmpId(null)} className="text-white hover:text-blue-200 text-2xl font-bold leading-none">&times;</button>
+            </div>
+            <div className="p-6 max-h-96 overflow-y-auto">
+              {manageEmpPeriods.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">No vacation periods found.</p>
+              ) : (
+                <div className="space-y-3">
+                  {manageEmpPeriods.map((period, idx) => (
+                    <div key={period.id} className={`border rounded-lg p-3 ${!period.end_date ? "border-blue-400 bg-blue-50" : "border-gray-200 bg-gray-50"}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-gray-500">Period {idx + 1}</span>
+                        <div className="flex gap-2">
+                          {!period.end_date && <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-medium">ACTIVE</span>}
+                          {editPeriodId !== period.id && (
+                            <>
+                              <button onClick={() => handleStartEdit(period)} className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-700 rounded px-2 py-1 font-medium transition">{"\u270E"} Edit</button>
+                              <button onClick={() => { if (confirm("Delete this vacation period?")) handleDeletePeriod(period.id); }} disabled={vacSaving} className="text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded px-2 py-1 font-medium transition disabled:opacity-50">{"\uD83D\uDDD1"} Delete</button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {editPeriodId === period.id ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs font-medium text-gray-600 w-16">Start:</label>
+                            <input type="date" value={editStart} onChange={(e) => setEditStart(e.target.value)} className="text-sm border rounded px-2 py-1 flex-1" />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs font-medium text-gray-600 w-16">End:</label>
+                            <input type="date" value={editEnd} onChange={(e) => setEditEnd(e.target.value)} className="text-sm border rounded px-2 py-1 flex-1" />
+                            {editEnd && <button onClick={() => setEditEnd("")} className="text-xs text-red-500 hover:text-red-700">Clear</button>}
+                          </div>
+                          <div className="flex gap-2 mt-2">
+                            <button onClick={handleSaveEdit} disabled={vacSaving || !editStart} className="text-xs bg-green-600 hover:bg-green-700 text-white rounded px-3 py-1.5 font-medium transition disabled:opacity-50">{vacSaving ? "Saving..." : "\u2714 Save"}</button>
+                            <button onClick={() => setEditPeriodId(null)} className="text-xs bg-gray-300 hover:bg-gray-400 text-gray-700 rounded px-3 py-1.5 font-medium transition">Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 text-sm">
+                          <span className="text-gray-600"><span className="font-medium">From:</span> {period.start_date}</span>
+                          <span className="text-gray-400">{"\u2192"}</span>
+                          <span className="text-gray-600"><span className="font-medium">To:</span> {period.end_date || "Ongoing"}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="bg-gray-50 px-6 py-3 flex justify-end">
+              <button onClick={() => setManageVacEmpId(null)} className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">Close</button>
+            </div>
           </div>
         </div>
       )}
