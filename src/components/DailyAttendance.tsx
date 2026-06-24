@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Employee } from "@/lib/types";
+import { Employee, VacationPeriod } from "@/lib/types";
 
 const GROUP_FILTERS = ["ALL", "OFFICE/ADMIN", "ADMIN", "CLEANER", "DRIVERS", "MECHANIC", "SALESMAN", "UMQ FACTORY", "FUJAIRAH FACTORY", "FACTORY/PRODUCTION", "DUBAI FACTORY", "DUBAI FACTORY NIGHT"];
 
@@ -64,7 +64,6 @@ const COLUMN_HEADER_COLORS: Record<string, string> = {
 };
 
 function toggleStatus(current: string, clicked: string): string {
-  // All statuses are exclusive — click to select, click again to deselect
   return current === clicked ? "" : clicked;
 }
 
@@ -88,6 +87,7 @@ export default function DailyAttendance() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendance, setAttendance] = useState<Record<number, string>>({});
   const [originalAttendance, setOriginalAttendance] = useState<Record<number, string>>({});
+  const [vacationPeriods, setVacationPeriods] = useState<VacationPeriod[]>([]);
   const [groupFilter, setGroupFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -101,12 +101,29 @@ export default function DailyAttendance() {
     return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d.getDay()];
   };
 
+  // Check if a specific date falls within any vacation period for an employee
+  const isDateInVacation = useCallback((empId: number, dateStr: string, periods?: VacationPeriod[]): boolean => {
+    const p = periods || vacationPeriods;
+    return p.some((vp) => {
+      if (vp.employee_id !== empId) return false;
+      if (dateStr < vp.start_date) return false;
+      if (vp.end_date && dateStr > vp.end_date) return false;
+      return true;
+    });
+  }, [vacationPeriods]);
+
+  // Check if employee has an active (open-ended) vacation period
+  const hasActiveVacation = useCallback((empId: number, periods?: VacationPeriod[]): boolean => {
+    const p = periods || vacationPeriods;
+    return p.some((vp) => vp.employee_id === empId && !vp.end_date);
+  }, [vacationPeriods]);
+
   const handleDayOffChange = async (empId: number, dayOff: string) => {
     setEmployees((prev) =>
       prev.map((e) => (e.id === empId ? { ...e, off_day: dayOff } : e))
     );
-    const emp = employees.find(e => e.id === empId);
-    if (!emp?.on_vacation) {
+    const empOnVacToday = isDateInVacation(empId, date);
+    if (!empOnVacToday) {
       const dayName = getDayName(date);
       if (dayOff === dayName) {
         if (!attendance[empId] || attendance[empId] === "P") {
@@ -134,45 +151,56 @@ export default function DailyAttendance() {
     }
   };
 
-  const handleVacationChange = async (empId: number, onVacation: boolean) => {
-    setEmployees((prev) =>
-      prev.map((e) => (e.id === empId ? { ...e, on_vacation: onVacation } : e))
-    );
-    if (onVacation) {
-      const currentStatus = attendance[empId] || "";
-      if (!currentStatus || currentStatus === "P" || currentStatus === "O") {
-        setAttendance((prev) => ({ ...prev, [empId]: "V" }));
+  const handleVacationChange = async (empId: number, activate: boolean) => {
+    if (activate) {
+      // Start a new vacation period from the selected date
+      try {
+        const res = await fetch("/api/vacation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ employee_id: empId, start_date: date }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setVacationPeriods((prev) => [...prev, data.period]);
+          // Set V for current date
+          const currentStatus = attendance[empId] || "";
+          if (!currentStatus || currentStatus === "P" || currentStatus === "O") {
+            setAttendance((prev) => ({ ...prev, [empId]: "V" }));
+          }
+        } else {
+          const err = await res.json();
+          console.error("Failed to start vacation:", err.error);
+        }
+      } catch (error) {
+        console.error("Failed to start vacation:", error);
       }
     } else {
-      const dayName = getDayName(date);
-      const emp = employees.find(e => e.id === empId);
-      if (attendance[empId] === "V" && !originalAttendance[empId]) {
-        if (emp?.off_day && emp.off_day === dayName) {
-          setAttendance((prev) => ({ ...prev, [empId]: "O" }));
+      // End the active vacation period on the selected date
+      try {
+        const res = await fetch("/api/vacation", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ employee_id: empId, end_date: date }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setVacationPeriods((prev) =>
+            prev.map((p) =>
+              p.employee_id === empId && !p.end_date
+                ? { ...p, end_date: data.period.end_date }
+                : p
+            )
+          );
+          // The current date is still within the closed period (end_date = today)
+          // so V should remain. No status change needed.
         } else {
-          setAttendance((prev) => {
-            const copy = { ...prev };
-            delete copy[empId];
-            return copy;
-          });
+          const err = await res.json();
+          console.error("Failed to end vacation:", err.error);
         }
-      } else if (attendance[empId] === "V" && originalAttendance[empId] === "V") {
-        if (emp?.off_day && emp.off_day === dayName) {
-          setAttendance((prev) => ({ ...prev, [empId]: "O" }));
-        } else {
-          setAttendance((prev) => ({ ...prev, [empId]: "" }));
-        }
+      } catch (error) {
+        console.error("Failed to end vacation:", error);
       }
-    }
-    try {
-      const res = await fetch("/api/employees", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: empId, on_vacation: onVacation }),
-      });
-      if (!res.ok) console.error("Failed to save vacation:", await res.text());
-    } catch (error) {
-      console.error("Failed to update vacation:", error);
     }
   };
 
@@ -181,11 +209,14 @@ export default function DailyAttendance() {
     try {
       const res = await fetch(`/api/attendance?date=${date}`);
       const data = await res.json();
-      const emps = data.employees || [];
-      const att = data.attendance || {};
+      const emps: Employee[] = data.employees || [];
+      const att: Record<number, string> = data.attendance || {};
+      const periods: VacationPeriod[] = data.vacationPeriods || [];
       const dayName = getDayName(date);
       for (const emp of emps) {
-        if (emp.on_vacation) {
+        // Check vacation periods for this date
+        const empOnVac = isDateInVacation(emp.id, date, periods);
+        if (empOnVac) {
           if (!att[emp.id] || att[emp.id] === "P" || att[emp.id] === "O") {
             att[emp.id] = "V";
           }
@@ -198,10 +229,12 @@ export default function DailyAttendance() {
       setEmployees(emps);
       setAttendance(att);
       setOriginalAttendance(data.attendance || {});
+      setVacationPeriods(periods);
     } catch (error) {
       console.error("Failed to fetch:", error);
     }
     setLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
 
   useEffect(() => {
@@ -228,7 +261,8 @@ export default function DailyAttendance() {
     const dayName = getDayName(date);
     filtered.forEach((emp) => {
       if (!updated[emp.id]) {
-        if (emp.on_vacation) {
+        const empOnVac = isDateInVacation(emp.id, date);
+        if (empOnVac) {
           updated[emp.id] = "V";
         } else if (emp.off_day && emp.off_day === dayName) {
           updated[emp.id] = "O";
@@ -490,9 +524,10 @@ export default function DailyAttendance() {
                   ...group.employees.map((emp) => {
                     globalSl++;
                     const status = attendance[emp.id] || "";
-                    const isOnVacation = emp.on_vacation || false;
+                    const isOnVac = hasActiveVacation(emp.id);
+                    const dateOnVac = isDateInVacation(emp.id, date);
                     return (
-                      <tr key={emp.id} className={`border-b hover:bg-gray-50 ${isOnVacation ? "bg-blue-50" : ""}`}>
+                      <tr key={emp.id} className={`border-b hover:bg-gray-50 ${dateOnVac ? "bg-blue-50" : ""}`}>
                         <td className="px-3 py-1.5 text-gray-400 text-xs">{globalSl}</td>
                         <td className="px-3 py-1.5 font-medium text-sm">{emp.name}</td>
                         <td className="px-3 py-1.5 text-gray-500 text-xs">{emp.section}</td>
@@ -504,11 +539,12 @@ export default function DailyAttendance() {
                         </td>
                         <td className="px-3 py-1.5 text-center">
                           <label className="inline-flex items-center cursor-pointer">
-                            <input type="checkbox" checked={isOnVacation} onChange={(e) => handleVacationChange(emp.id, e.target.checked)} className="sr-only peer" />
-                            <div className={`relative w-9 h-5 rounded-full peer transition-colors ${isOnVacation ? "bg-blue-600" : "bg-gray-300"}`}>
-                              <div className={`absolute top-0.5 left-0.5 bg-white w-4 h-4 rounded-full transition-transform ${isOnVacation ? "translate-x-4" : ""}`}></div>
+                            <input type="checkbox" checked={isOnVac} onChange={(e) => handleVacationChange(emp.id, e.target.checked)} className="sr-only peer" />
+                            <div className={`relative w-9 h-5 rounded-full peer transition-colors ${isOnVac ? "bg-blue-600" : dateOnVac ? "bg-green-500" : "bg-gray-300"}`}>
+                              <div className={`absolute top-0.5 left-0.5 bg-white w-4 h-4 rounded-full transition-transform ${isOnVac ? "translate-x-4" : ""}`}></div>
                             </div>
-                            {isOnVacation && <span className="ml-1 text-xs font-bold text-blue-600">V</span>}
+                            {isOnVac && <span className="ml-1 text-xs font-bold text-blue-600">V</span>}
+                            {!isOnVac && dateOnVac && <span className="ml-1 text-[9px] text-green-600">\u2714</span>}
                           </label>
                         </td>
                         <td className="px-3 py-1.5">
