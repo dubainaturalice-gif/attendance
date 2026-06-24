@@ -659,7 +659,7 @@ export default function DailyAttendance() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setManageVacEmpId(null)}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="bg-blue-600 text-white px-6 py-4 flex items-center justify-between">
-              <h3 className="text-lg font-bold">{"\uD83C\uDFD6\uFE0F"} Vacation Periods \u2014 {manageEmpName}</h3>
+              <h3 className="text-lg font-bold">{"\uD83C\uDFD6\uFE0F"} Vacation Periods {"\u2014"} {manageEmpName}</h3>
               <button onClick={() => setManageVacEmpId(null)} className="text-white hover:text-blue-200 text-2xl font-bold leading-none">&times;</button>
             </div>
             <div className="p-6 max-h-96 overflow-y-auto">
