@@ -1,6 +1,16 @@
 import { getSQL } from '@/lib/db';
 import { NextResponse } from 'next/server';
 
+function formatDate(d: unknown): string {
+  if (d instanceof Date) return d.toISOString().split('T')[0];
+  if (typeof d === 'string') {
+    const parsed = new Date(d);
+    if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+    return d;
+  }
+  return '';
+}
+
 export async function GET(request: Request) {
   try {
     const sql = getSQL();
@@ -15,6 +25,19 @@ export async function GET(request: Request) {
       ORDER BY grp, section, name
     `;
 
+    // Always fetch vacation periods
+    const vacPeriodsResult = await sql`
+      SELECT id, employee_id, start_date, end_date
+      FROM vacation_periods
+      ORDER BY employee_id, start_date
+    `;
+    const vacationPeriods = vacPeriodsResult.map((r) => ({
+      id: r.id as number,
+      employee_id: r.employee_id as number,
+      start_date: formatDate(r.start_date),
+      end_date: r.end_date ? formatDate(r.end_date) : null,
+    }));
+
     if (date) {
       const attResult = await sql`
         SELECT employee_id, status 
@@ -25,7 +48,7 @@ export async function GET(request: Request) {
       for (const row of attResult) {
         attendance[row.employee_id as number] = row.status as string;
       }
-      return NextResponse.json({ employees, attendance });
+      return NextResponse.json({ employees, attendance, vacationPeriods });
     }
 
     if (month) {
@@ -47,7 +70,7 @@ export async function GET(request: Request) {
         const dateStr = d.toISOString().split('T')[0];
         attendance[empId][dateStr] = row.status as string;
       }
-      return NextResponse.json({ employees, attendance });
+      return NextResponse.json({ employees, attendance, vacationPeriods });
     }
 
     return NextResponse.json({ error: 'Missing date or month parameter' }, { status: 400 });
