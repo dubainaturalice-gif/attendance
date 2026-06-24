@@ -39,7 +39,6 @@ export async function POST(request: Request) {
     if (!employee_id || !start_date) {
       return NextResponse.json({ error: 'Missing employee_id or start_date' }, { status: 400 });
     }
-    // End any existing active vacation first
     await sql`
       UPDATE vacation_periods SET end_date = ${start_date}
       WHERE employee_id = ${employee_id} AND end_date IS NULL
@@ -89,6 +88,82 @@ export async function PUT(request: Request) {
         employee_id: period.employee_id as number,
         start_date: formatDate(period.start_date),
         end_date: formatDate(period.end_date),
+      },
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const sql = getSQL();
+    const { id } = await request.json();
+    if (!id) {
+      return NextResponse.json({ error: 'Missing period id' }, { status: 400 });
+    }
+    const result = await sql`
+      DELETE FROM vacation_periods WHERE id = ${id}
+      RETURNING id, employee_id
+    `;
+    if (result.length === 0) {
+      return NextResponse.json({ error: 'Period not found' }, { status: 404 });
+    }
+    const empId = result[0].employee_id;
+    const remaining = await sql`
+      SELECT id FROM vacation_periods WHERE employee_id = ${empId} AND end_date IS NULL
+    `;
+    if (remaining.length === 0) {
+      await sql`UPDATE employees SET on_vacation = false WHERE id = ${empId}`;
+    }
+    return NextResponse.json({ success: true, deleted_id: id });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const sql = getSQL();
+    const { id, start_date, end_date } = await request.json();
+    if (!id) {
+      return NextResponse.json({ error: 'Missing period id' }, { status: 400 });
+    }
+    if (!start_date && end_date === undefined) {
+      return NextResponse.json({ error: 'Missing start_date or end_date' }, { status: 400 });
+    }
+    let result;
+    if (start_date && end_date !== undefined) {
+      result = await sql`
+        UPDATE vacation_periods SET start_date = ${start_date}, end_date = ${end_date || null}
+        WHERE id = ${id}
+        RETURNING id, employee_id, start_date, end_date
+      `;
+    } else if (start_date) {
+      result = await sql`
+        UPDATE vacation_periods SET start_date = ${start_date}
+        WHERE id = ${id}
+        RETURNING id, employee_id, start_date, end_date
+      `;
+    } else {
+      result = await sql`
+        UPDATE vacation_periods SET end_date = ${end_date || null}
+        WHERE id = ${id}
+        RETURNING id, employee_id, start_date, end_date
+      `;
+    }
+    if (result.length === 0) {
+      return NextResponse.json({ error: 'Period not found' }, { status: 404 });
+    }
+    const period = result[0];
+    return NextResponse.json({
+      period: {
+        id: period.id as number,
+        employee_id: period.employee_id as number,
+        start_date: formatDate(period.start_date),
+        end_date: period.end_date ? formatDate(period.end_date) : null,
       },
     });
   } catch (error: unknown) {
