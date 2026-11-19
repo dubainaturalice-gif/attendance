@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Employee, VacationPeriod } from "@/lib/types";
 
-const GROUP_FILTERS = ["ALL", "OFFICE/ADMIN", "ADMIN", "CLEANER", "DRIVERS", "MECHANIC", "SALESMAN", "UMQ FACTORY", "FUJAIRAH FACTORY", "FACTORY/PRODUCTION", "DUBAI FACTORY", "DUBAI FACTORY NIGHT"];
+const GROUP_FILTERS = ["ALL", "OFFICE/ADMIN", "ADMIN", "CLEANER", "DRIVERS", "MECHANIC", "SALESMAN", "UMQ FACTORY", "FUJAIRAH FACTORY", "FACTORY/PRODUCTION", "DUBAI FACTORY", "DUBAI FACTORY NIGHT", "ALLFIXERS"];
 
 const SECTION_COLORS: Record<string, string> = {
   "ADMIN": "#4472C4",
@@ -34,7 +34,7 @@ const SECTION_COLORS: Record<string, string> = {
   "PRODUCTION UMQ NIGHT SHIFT": "#C55A11",
   "UMQ TECHNICIAN": "#548235",
   "FUJAIRAH FACTORY": "#C55A11",
-  "PROD NIGHT - LUXURY ICE": "#BF8F00",
+  "PROD NIGHT - LUXURY ICE": "#BF8F00", "ALLFIXERS": "#00897B",
 };
 
 const PDF_COLUMN_MAP: Record<string, string> = {
@@ -48,17 +48,17 @@ const PDF_COLUMN_MAP: Record<string, string> = {
   "MECHANIC": "UMQ FACTORY",
   "DUBAI FACTORY": "DUBAI FACTORY",
   "DUBAI FACTORY NIGHT": "DUBAI FACTORY",
-  "FUJAIRAH FACTORY": "FUJAIRAH FACTORY",
+  "FUJAIRAH FACTORY": "FUJAIRAH FACTORY", "ALLFIXERS": "ALLFIXERS",
 };
 
-const PDF_COLUMN_ORDER = ["ADMIN", "DRIVERS", "SALESMAN", "UMQ FACTORY", "DUBAI FACTORY", "FUJAIRAH FACTORY"];
+const PDF_COLUMN_ORDER = ["ADMIN", "DRIVERS", "SALESMAN", "UMQ FACTORY", "DUBAI FACTORY", "FUJAIRAH FACTORY", "ALLFIXERS"];
 
 const COLUMN_HEADER_COLORS: Record<string, string> = {
   "ADMIN": "#2E5090",
   "DRIVERS": "#4472C4",
   "SALESMAN": "#548235",
   "UMQ FACTORY": "#7030A0",
-  "DUBAI FACTORY": "#C55A11",
+  "DUBAI FACTORY": "#C55A11", "ALLFIXERS": "#00897B",
   "FUJAIRAH FACTORY": "#C55A11",
 };
 
@@ -411,7 +411,7 @@ export default function DailyAttendance() {
       const neededHeight = 25 + (maxRows * rowH) + 30;
       const pageHeight = Math.max(210, neededHeight);
       const numCols = PDF_COLUMN_ORDER.length;
-      const pageWidth = numCols <= 5 ? 297 : 350;
+      const pageWidth = numCols <= 5 ? 297 : Math.max(350, numCols * 58 + 20);
       const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [pageWidth, pageHeight] });
       doc.setFontSize(11);
       doc.setTextColor(46, 80, 144);
